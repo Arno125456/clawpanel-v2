@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { existsSync, readdirSync, readFileSync, writeFileSync, statSync, mkdirSync, cpSync, renameSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, cpSync, rmSync } from 'fs'
 import { join, dirname } from 'path'
 import { loadSkillsAsync } from '@/lib/skills'
 import { apiErrorResponse } from '@/lib/api-error'
@@ -21,7 +21,7 @@ function patchName(content: string, newName: string): string {
 export async function POST(req: Request) {
   try {
     const body = await req.json() as {
-      action: 'duplicate' | 'rename'
+      action: 'duplicate' | 'rename' | 'delete'
       skillId: string
       newName?: string   // display name for rename
       newId?: string     // folder id for duplicate
@@ -80,6 +80,17 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json({ ok: true, originalId: skillId, newId: targetId })
+    }
+
+    // ── DELETE ────────────────────────────────────────────────────────────────
+    if (action === 'delete') {
+      // Protect bundled (read-only) skills
+      if (skill.source === 'bundled') {
+        return NextResponse.json({ error: 'Bundled skills cannot be deleted' }, { status: 403 })
+      }
+
+      rmSync(skillDir, { recursive: true, force: true })
+      return NextResponse.json({ ok: true, deleted: skillId })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

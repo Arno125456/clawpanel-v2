@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import {
   Terminal, ExternalLink, Package, Search, X, RefreshCw, Edit,
   ChevronDown, ChevronRight, Settings2, CheckCircle2, AlertCircle, MinusCircle,
-  Copy, Pencil
+  Copy, Pencil, Trash2
 } from 'lucide-react'
 import type { Skill } from '@/lib/skills'
 import { Button } from '@/components/ui/button'
@@ -60,6 +60,7 @@ function SkillDetailPanel({
   onToggle: (id: string, nextEnabled: boolean) => void
   onDuplicate: (id: string) => Promise<void>
   onRename: (id: string, newName: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
 }) {
   const [apiKey, setApiKey] = useState('')
   const [saved, setSaved] = useState(false)
@@ -71,6 +72,8 @@ function SkillDetailPanel({
   const [isRenaming, setIsRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(skill.name)
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const handleSave = () => {
     setSaved(true)
@@ -95,6 +98,18 @@ function SkillDetailPanel({
       setIsRenaming(false)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return }
+    setIsDeleting(true)
+    try {
+      await onDelete(skill.id)
+      onClose()
+    } finally {
+      setIsDeleting(false)
+      setConfirmDelete(false)
     }
   }
 
@@ -149,42 +164,59 @@ function SkillDetailPanel({
         "fixed right-0 top-0 h-full z-50 bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right-8 duration-300",
         isEditing ? "w-full max-w-2xl" : "w-full max-w-md"
       )}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <StatusDot skill={skill} />
-            {!isEditing && skill.emoji && <span className="text-lg">{skill.emoji}</span>}
-            <h2 className="font-semibold text-base">{isEditing ? `Edit ${skill.name}` : skill.name}</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {!isEditing && (
-              <>
-                <Button
-                  size="sm" variant="outline"
-                  onClick={handleDuplicate}
-                  disabled={isDuplicating}
-                  className="h-8 gap-1.5 text-xs"
-                >
-                  {isDuplicating
-                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    : <Copy className="w-3.5 h-3.5" />}
-                  Duplicate
-                </Button>
-                <Button
-                  size="sm" variant="outline"
-                  onClick={() => { setIsRenaming(true); setRenameValue(skill.name); setTimeout(() => renameInputRef.current?.focus(), 50) }}
-                  className="h-8 gap-1.5 text-xs"
-                >
-                  <Pencil className="w-3.5 h-3.5" /> Rename
-                </Button>
-                <Button size="sm" variant="outline" onClick={handleEditClick} className="h-8 gap-1.5 text-xs">
-                  <Edit className="w-3.5 h-3.5" /> Edit SKILL.md
-                </Button>
-              </>
-            )}
-            <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8">
+        <div className="border-b border-border shrink-0">
+          {/* Title row */}
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <StatusDot skill={skill} />
+              {!isEditing && skill.emoji && <span className="text-lg">{skill.emoji}</span>}
+              <h2 className="font-semibold text-base truncate">{isEditing ? `Edit ${skill.name}` : skill.name}</h2>
+            </div>
+            <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8 shrink-0 ml-2">
               <X className="h-4 w-4" />
             </Button>
           </div>
+          {/* Action toolbar row */}
+          {!isEditing && (
+            <div className="flex items-center gap-2 px-6 pb-3 flex-wrap">
+              <Button
+                size="sm" variant="outline"
+                onClick={handleDuplicate}
+                disabled={isDuplicating}
+                className="h-8 gap-1.5 text-xs"
+              >
+                {isDuplicating
+                  ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  : <Copy className="w-3.5 h-3.5" />}
+                Duplicate
+              </Button>
+              <Button
+                size="sm" variant="outline"
+                onClick={() => { setIsRenaming(true); setRenameValue(skill.name); setTimeout(() => renameInputRef.current?.focus(), 50) }}
+                className="h-8 gap-1.5 text-xs"
+              >
+                <Pencil className="w-3.5 h-3.5" /> Rename
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleEditClick} className="h-8 gap-1.5 text-xs">
+                <Edit className="w-3.5 h-3.5" /> Edit SKILL.md
+              </Button>
+              {skill.source !== 'bundled' && (
+                <Button
+                  size="sm"
+                  variant={confirmDelete ? 'destructive' : 'outline'}
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  onBlur={() => setConfirmDelete(false)}
+                  className="h-8 gap-1.5 text-xs ml-auto"
+                >
+                  {isDeleting
+                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    : <Trash2 className="w-3.5 h-3.5" />}
+                  {confirmDelete ? 'Confirm Delete' : 'Delete'}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5 flex flex-col">
@@ -598,6 +630,23 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
     }
   }, [syncSkills])
 
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      const res = await fetch('/api/skills/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', skillId: id }),
+      })
+      if (res.ok) {
+        setSkills(prev => prev.filter(s => s.id !== id))
+      } else {
+        console.error('Failed to delete skill:', await res.text())
+      }
+    } catch (err) {
+      console.error('Error deleting skill:', err)
+    }
+  }, [])
+
   // counts
   const statusCounts = useMemo<Record<StatusFilter, number>>(() => ({
     all: skills.length,
@@ -748,6 +797,7 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
           onToggle={handleToggle}
           onDuplicate={handleDuplicate}
           onRename={handleRename}
+          onDelete={handleDelete}
         />
       )}
     </div>
