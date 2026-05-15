@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Terminal, ExternalLink, Package, Search, X, RefreshCw, Edit,
-  ChevronDown, ChevronRight, Eye, Settings2, CheckCircle2, AlertCircle, MinusCircle
+  ChevronDown, ChevronRight, Settings2, CheckCircle2, AlertCircle, MinusCircle,
+  Copy, Pencil
 } from 'lucide-react'
 import type { Skill } from '@/lib/skills'
 import { Button } from '@/components/ui/button'
@@ -51,10 +52,14 @@ function SkillDetailPanel({
   skill,
   onClose,
   onToggle,
+  onDuplicate,
+  onRename,
 }: {
   skill: SkillWithState
   onClose: () => void
   onToggle: (id: string, nextEnabled: boolean) => void
+  onDuplicate: (id: string) => Promise<void>
+  onRename: (id: string, newName: string) => Promise<void>
 }) {
   const [apiKey, setApiKey] = useState('')
   const [saved, setSaved] = useState(false)
@@ -62,10 +67,35 @@ function SkillDetailPanel({
   const [skillContent, setSkillContent] = useState('')
   const [isLoadingContent, setIsLoadingContent] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDuplicating, setIsDuplicating] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(skill.name)
+  const renameInputRef = useRef<HTMLInputElement>(null)
 
   const handleSave = () => {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleDuplicate = async () => {
+    setIsDuplicating(true)
+    try {
+      await onDuplicate(skill.id)
+    } finally {
+      setIsDuplicating(false)
+    }
+  }
+
+  const handleRenameSubmit = async () => {
+    const trimmed = renameValue.trim()
+    if (!trimmed || trimmed === skill.name) { setIsRenaming(false); return }
+    setIsSaving(true)
+    try {
+      await onRename(skill.id, trimmed)
+      setIsRenaming(false)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleEditClick = async () => {
@@ -127,9 +157,29 @@ function SkillDetailPanel({
           </div>
           <div className="flex items-center gap-2">
             {!isEditing && (
-              <Button size="sm" variant="outline" onClick={handleEditClick} className="h-8 gap-1.5 text-xs">
-                <Edit className="w-3.5 h-3.5" /> Edit SKILL.md
-              </Button>
+              <>
+                <Button
+                  size="sm" variant="outline"
+                  onClick={handleDuplicate}
+                  disabled={isDuplicating}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  {isDuplicating
+                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    : <Copy className="w-3.5 h-3.5" />}
+                  Duplicate
+                </Button>
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => { setIsRenaming(true); setRenameValue(skill.name); setTimeout(() => renameInputRef.current?.focus(), 50) }}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Rename
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleEditClick} className="h-8 gap-1.5 text-xs">
+                  <Edit className="w-3.5 h-3.5" /> Edit SKILL.md
+                </Button>
+              </>
             )}
             <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8">
               <X className="h-4 w-4" />
@@ -162,6 +212,24 @@ function SkillDetailPanel({
             )
           ) : (
             <>
+              {/* Inline rename input */}
+              {isRenaming ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={renameInputRef}
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setIsRenaming(false) }}
+                    className="flex-1 bg-muted/30 border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="New skill name…"
+                  />
+                  <Button size="sm" onClick={handleRenameSubmit} disabled={isSaving}>
+                    {isSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : 'Save'}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setIsRenaming(false)} disabled={isSaving}>Cancel</Button>
+                </div>
+              ) : null}
+
               <p className="text-sm text-muted-foreground leading-relaxed">{skill.description}</p>
 
               <div className="flex flex-wrap gap-1.5">
@@ -286,10 +354,12 @@ function SkillCard({
   skill,
   onOpen,
   onToggle,
+  onDuplicate,
 }: {
   skill: SkillWithState
   onOpen: (id: string) => void
   onToggle: (id: string, nextEnabled: boolean) => void
+  onDuplicate: (id: string) => Promise<void>
 }) {
   return (
     <div
@@ -326,19 +396,28 @@ function SkillCard({
             </div>
           </div>
 
-          {/* toggle */}
-          <button
-            onClick={e => { e.stopPropagation(); onToggle(skill.id, skill.disabled) }}
-            className={cn(
-              'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
-              skill.disabled ? 'bg-muted' : 'bg-primary'
-            )}
-          >
-            <span className={cn(
-              'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
-              skill.disabled ? 'translate-x-0.5' : 'translate-x-[18px]'
-            )} />
-          </button>
+          {/* actions */}
+          <div className="flex items-center gap-1.5">
+            <button
+              title="Duplicate skill"
+              onClick={e => { e.stopPropagation(); onDuplicate(skill.id) }}
+              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); onToggle(skill.id, skill.disabled) }}
+              className={cn(
+                'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
+                skill.disabled ? 'bg-muted' : 'bg-primary'
+              )}
+            >
+              <span className={cn(
+                'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
+                skill.disabled ? 'translate-x-0.5' : 'translate-x-[18px]'
+              )} />
+            </button>
+          </div>
         </div>
 
         {/* description */}
@@ -382,11 +461,13 @@ function SkillGroup({
   skills,
   onOpen,
   onToggle,
+  onDuplicate,
 }: {
   label: string
   skills: SkillWithState[]
   onOpen: (id: string) => void
   onToggle: (id: string, nextEnabled: boolean) => void
+  onDuplicate: (id: string) => Promise<void>
 }) {
   const [open, setOpen] = useState(true)
 
@@ -403,7 +484,7 @@ function SkillGroup({
       {open && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {skills.map(skill => (
-            <SkillCard key={skill.id} skill={skill} onOpen={onOpen} onToggle={onToggle} />
+            <SkillCard key={skill.id} skill={skill} onOpen={onOpen} onToggle={onToggle} onDuplicate={onDuplicate} />
           ))}
         </div>
       )}
@@ -479,6 +560,43 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
       console.error('Error toggling skill:', err)
     }
   }, [])
+
+  const handleDuplicate = useCallback(async (id: string) => {
+    try {
+      const res = await fetch('/api/skills/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'duplicate', skillId: id }),
+      })
+      if (res.ok) {
+        await syncSkills(false)
+      } else {
+        console.error('Failed to duplicate skill:', await res.text())
+      }
+    } catch (err) {
+      console.error('Error duplicating skill:', err)
+    }
+  }, [syncSkills])
+
+  const handleRename = useCallback(async (id: string, newName: string) => {
+    // Optimistic update
+    setSkills(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s))
+    try {
+      const res = await fetch('/api/skills/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'rename', skillId: id, newName }),
+      })
+      if (!res.ok) {
+        // Roll back
+        await syncSkills(false)
+        console.error('Failed to rename skill:', await res.text())
+      }
+    } catch (err) {
+      await syncSkills(false)
+      console.error('Error renaming skill:', err)
+    }
+  }, [syncSkills])
 
   // counts
   const statusCounts = useMemo<Record<StatusFilter, number>>(() => ({
@@ -608,13 +726,14 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
                 skills={group.skills}
                 onOpen={setDetailId}
                 onToggle={handleToggle}
+                onDuplicate={handleDuplicate}
               />
             ))
           ) : (
             /* flat grid (no groups) */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filtered.map(skill => (
-                <SkillCard key={skill.id} skill={skill} onOpen={setDetailId} onToggle={handleToggle} />
+                <SkillCard key={skill.id} skill={skill} onOpen={setDetailId} onToggle={handleToggle} onDuplicate={handleDuplicate} />
               ))}
             </div>
           )}
@@ -627,6 +746,8 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
           skill={detailSkill}
           onClose={() => setDetailId(null)}
           onToggle={handleToggle}
+          onDuplicate={handleDuplicate}
+          onRename={handleRename}
         />
       )}
     </div>
