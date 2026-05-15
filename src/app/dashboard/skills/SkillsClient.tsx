@@ -179,41 +179,45 @@ function SkillDetailPanel({
           </div>
           {/* Action toolbar row */}
           {!isEditing && (
-            <div className="flex items-center gap-2 px-6 pb-3 flex-wrap">
-              <Button
-                size="sm" variant="outline"
-                onClick={handleDuplicate}
-                disabled={isDuplicating}
-                className="h-8 gap-1.5 text-xs"
-              >
-                {isDuplicating
-                  ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  : <Copy className="w-3.5 h-3.5" />}
-                Duplicate
-              </Button>
-              <Button
-                size="sm" variant="outline"
-                onClick={() => { setIsRenaming(true); setRenameValue(skill.name); setTimeout(() => renameInputRef.current?.focus(), 50) }}
-                className="h-8 gap-1.5 text-xs"
-              >
-                <Pencil className="w-3.5 h-3.5" /> Rename
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleEditClick} className="h-8 gap-1.5 text-xs">
-                <Edit className="w-3.5 h-3.5" /> Edit SKILL.md
-              </Button>
+            <div className="flex items-center justify-between px-6 pb-3">
+              {/* Left: primary actions */}
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm" variant="outline"
+                  onClick={handleDuplicate}
+                  disabled={isDuplicating}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  {isDuplicating
+                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    : <Copy className="w-3.5 h-3.5" />}
+                  Duplicate
+                </Button>
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => { setIsRenaming(true); setRenameValue(skill.name); setTimeout(() => renameInputRef.current?.focus(), 50) }}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Rename
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleEditClick} className="h-8 gap-1.5 text-xs">
+                  <Edit className="w-3.5 h-3.5" /> Edit SKILL.md
+                </Button>
+              </div>
+              {/* Right: destructive action */}
               {skill.source !== 'bundled' && (
                 <Button
                   size="sm"
-                  variant={confirmDelete ? 'destructive' : 'outline'}
+                  variant={confirmDelete ? 'destructive' : 'ghost'}
                   onClick={handleDelete}
                   disabled={isDeleting}
                   onBlur={() => setConfirmDelete(false)}
-                  className="h-8 gap-1.5 text-xs ml-auto"
+                  className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive"
                 >
                   {isDeleting
                     ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     : <Trash2 className="w-3.5 h-3.5" />}
-                  {confirmDelete ? 'Confirm Delete' : 'Delete'}
+                  {confirmDelete ? 'Confirm?' : 'Delete'}
                 </Button>
               )}
             </div>
