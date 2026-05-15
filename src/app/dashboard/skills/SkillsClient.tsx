@@ -54,6 +54,7 @@ function SkillDetailPanel({
   onToggle,
   onDuplicate,
   onRename,
+  onDelete,
 }: {
   skill: SkillWithState
   onClose: () => void
