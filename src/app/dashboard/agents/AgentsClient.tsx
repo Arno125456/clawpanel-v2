@@ -1473,14 +1473,19 @@ function SkillsPanel({ agentId, isActive }: { agentId: string; isActive: boolean
   const save = async () => {
     setSaving(true); setError(null)
     try {
-      const skills = pending.size > 0 ? Array.from(pending) : null
+      // null  = inherit all (no allowlist — removes skills field from config)
+      // []    = custom allowlist with nothing enabled (disables all skills)
+      // [...] = custom allowlist with specific skills
+      const skills: string[] | null = allowlist !== null
+        ? Array.from(pending)   // in custom mode: send [] or [...]
+        : null                   // still inheriting: send null
       const res = await fetch(`/api/agents/${agentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skills }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setAllowlist(skills ? new Set(skills) : null)
+      setAllowlist(skills !== null ? new Set(skills) : null)
       setDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)

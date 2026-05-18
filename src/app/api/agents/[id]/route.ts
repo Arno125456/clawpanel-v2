@@ -46,7 +46,8 @@ export async function GET(
 // PATCH /api/agents/[id]
 // Accepts { skills: string[] | null } to update the per-agent skill allowlist.
 //   skills: string[]  → write explicit allowlist to agents.list[].skills
-//   skills: null | [] → delete the field — agent inherits agents.defaults.skills
+//   skills: []        → write empty allowlist (all skills disabled)
+//   skills: null      → delete the field — agent inherits agents.defaults.skills
 // Also accepts { model: string } to update the per-agent model override.
 export async function PATCH(
   req: Request,
@@ -65,10 +66,10 @@ export async function PATCH(
 
     // Skills allowlist
     if ('skills' in body) {
-      if (body.skills === null || (Array.isArray(body.skills) && body.skills.length === 0)) {
-        delete cfg.agents.list[idx].skills  // inherit global
+      if (body.skills === null) {
+        delete cfg.agents.list[idx].skills  // null = inherit global (no restriction)
       } else if (Array.isArray(body.skills)) {
-        cfg.agents.list[idx].skills = body.skills
+        cfg.agents.list[idx].skills = body.skills  // [] = explicitly disabled, [...] = allowlist
       }
     }
 
