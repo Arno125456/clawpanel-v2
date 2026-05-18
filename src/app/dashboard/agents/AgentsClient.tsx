@@ -1469,7 +1469,6 @@ function SkillsPanel({ agentId, isActive }: { agentId: string; isActive: boolean
     setAllowlist(new Set())  // enter custom mode with nothing enabled
     setDirty(true)
   }
-  const reset      = () => { setPending(allowlist ? new Set(allowlist) : new Set()); setDirty(false) }
 
   const save = async () => {
     setSaving(true); setError(null)
@@ -1517,7 +1516,6 @@ function SkillsPanel({ agentId, isActive }: { agentId: string; isActive: boolean
         <div className="flex items-center gap-2 flex-wrap">
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={enableAll}>Enable All</Button>
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={disableAll}>Disable All</Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={reset} disabled={!dirty}>Reset</Button>
           <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={load} disabled={loading}>
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />Refresh
           </Button>
