@@ -1458,8 +1458,17 @@ function SkillsPanel({ agentId, isActive }: { agentId: string; isActive: boolean
     setDirty(true)
   }
 
-  const enableAll  = () => { setPending(new Set(allSkills.map(s => s.id))); setDirty(true) }
-  const disableAll = () => { setPending(new Set()); setDirty(true) }
+  const enableAll  = () => {
+    const all = new Set(allSkills.map(s => s.id))
+    setPending(all)
+    setAllowlist(all)   // enter custom mode so effectiveEnabled reflects pending
+    setDirty(true)
+  }
+  const disableAll = () => {
+    setPending(new Set())
+    setAllowlist(new Set())  // enter custom mode with nothing enabled
+    setDirty(true)
+  }
   const reset      = () => { setPending(allowlist ? new Set(allowlist) : new Set()); setDirty(false) }
 
   const save = async () => {
