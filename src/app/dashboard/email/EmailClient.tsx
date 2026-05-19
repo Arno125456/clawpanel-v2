@@ -131,7 +131,7 @@ export default function EmailClient({ initial }: { initial: EmailPageData }) {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
+          <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
             Email Request Monitoring
           </h2>
           <p className="text-muted-foreground mt-1 text-sm flex items-center gap-1.5">
@@ -245,7 +245,7 @@ export default function EmailClient({ initial }: { initial: EmailPageData }) {
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-sm truncate">{project.subject}</h4>
+                          <h4 className="font-semibold text-sm truncate text-foreground">{project.subject}</h4>
                           <span className={`text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ${
                             project.status === 'done' ? 'bg-emerald-500/10 text-emerald-500' :
                             project.status === 'in-progress' ? 'bg-blue-500/10 text-blue-500' :
@@ -315,7 +315,7 @@ export default function EmailClient({ initial }: { initial: EmailPageData }) {
             <div className="p-4 border-b bg-muted/20 flex items-center justify-between shadow-sm z-10">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-primary" />
-                <span className="font-semibold text-sm">Automated Agent</span>
+                <span className="font-semibold text-sm text-foreground">Automated Agent</span>
               </div>
               {cron && (
                 <span
@@ -338,7 +338,7 @@ export default function EmailClient({ initial }: { initial: EmailPageData }) {
                       Schedule
                     </p>
                     <div className="flex items-center justify-between bg-muted/50 rounded-lg p-2.5 border">
-                      <span className="font-mono text-sm">{cron.schedule}</span>
+                      <span className="font-mono text-sm text-foreground">{cron.schedule}</span>
                       <span className="text-xs text-muted-foreground font-medium">{cron.scheduleDescription}</span>
                     </div>
                   </div>
@@ -354,7 +354,7 @@ export default function EmailClient({ initial }: { initial: EmailPageData }) {
                             cron.lastError ? "bg-red-500 animate-pulse" : "bg-emerald-500"
                           }`}
                         />
-                        <span className="text-xs font-medium">
+                        <span className="text-xs font-medium text-foreground">
                           {cron.lastRun ? timeSince(cron.lastRun) : "Never"}
                         </span>
                       </div>
@@ -363,7 +363,7 @@ export default function EmailClient({ initial }: { initial: EmailPageData }) {
                       <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">
                         Next Run
                       </p>
-                      <span className="text-xs font-medium">
+                      <span className="text-xs font-medium text-foreground">
                         {cron.nextRun ? timeSince(cron.nextRun) : "—"}
                       </span>
                     </div>

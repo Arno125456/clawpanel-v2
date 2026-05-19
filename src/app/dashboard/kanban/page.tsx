@@ -271,7 +271,7 @@ function TaskCard({
         <div className="flex items-start gap-2">
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 mt-0.5 shrink-0 group-hover:text-muted-foreground/60 transition-colors" />
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm leading-snug">{ticket.title}</p>
+            <p className="font-medium text-sm leading-snug text-foreground">{ticket.title}</p>
             {ticket.description && (
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{ticket.description}</p>
             )}
@@ -571,7 +571,7 @@ export default function KanbanPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
+          <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
             Kanban Board
           </h2>
           <p className="text-muted-foreground mt-1 text-sm flex items-center gap-3">
