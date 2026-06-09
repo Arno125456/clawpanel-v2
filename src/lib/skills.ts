@@ -3,6 +3,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import { dirname, join, resolve } from 'path'
 import os from 'os'
+import { readLockRegistry } from '@/lib/skill-locks'
 
 const execAsync = promisify(exec)
 
@@ -44,6 +45,10 @@ export interface Skill {
   path: string
   /** True by default; false when OpenClaw config has skills.entries.<id>.enabled === false */
   enabled: boolean
+  /** True when the skill is locked (read-only on disk; only the owner may edit) */
+  locked: boolean
+  /** Owner uid that locked the skill, or null when unlocked */
+  lockedBy: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +156,9 @@ function readSkillsFromDir(dir: string, source: Skill['source']): Skill[] {
       install: extractInstall(content),
       source,
       path: skillFile,
-      enabled: true, // overlaid with real config state in loadSkills()
+      enabled: true,    // overlaid with real config state in loadSkills()
+      locked: false,    // overlaid with lock registry in loadSkills()
+      lockedBy: null,
     })
   }
   return skills
@@ -272,11 +279,14 @@ export async function loadSkillsAsync(): Promise<Skill[]> {
     addFrom(join(workspacePath, 'skills'), 'workspace')
   }
 
-  // Overlay real-time enabled states from OpenClaw config
+  // Overlay real-time enabled states from OpenClaw config + lock registry
   const enabledStates = await loadSkillEnabledStatesAsync()
+  const lockRegistry = readLockRegistry()
   const skills = Array.from(byId.values()).map(skill => ({
     ...skill,
     enabled: enabledStates[skill.id] ?? true,
+    locked: skill.id in lockRegistry,
+    lockedBy: lockRegistry[skill.id]?.lockedBy ?? null,
   }))
 
   return skills.sort((a, b) => a.id.localeCompare(b.id))

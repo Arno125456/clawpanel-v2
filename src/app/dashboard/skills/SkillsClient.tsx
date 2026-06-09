@@ -5,13 +5,14 @@ import { createPortal } from 'react-dom'
 import {
   Terminal, ExternalLink, Package, Search, X, RefreshCw, Edit,
   ChevronDown, ChevronRight, Settings2, CheckCircle2, AlertCircle, MinusCircle,
-  Copy, Pencil, Trash2
+  Copy, Pencil, Trash2, Lock, LockOpen
 } from 'lucide-react'
 import type { Skill } from '@/lib/skills'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { authHeaders } from '@/lib/client-auth'
 
 // ----- types -----------------------------------------------------------------
 
@@ -55,6 +56,9 @@ function SkillDetailPanel({
   onDuplicate,
   onRename,
   onDelete,
+  onLock,
+  isOwner,
+  ownerConfigured,
 }: {
   skill: SkillWithState
   onClose: () => void
@@ -62,7 +66,12 @@ function SkillDetailPanel({
   onDuplicate: (id: string) => Promise<void>
   onRename: (id: string, newName: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onLock: (id: string, nextLocked: boolean) => Promise<void>
+  isOwner: boolean
+  ownerConfigured: boolean
 }) {
+  // A locked skill is editable only by the owner.
+  const editLocked = skill.locked && !isOwner
   const [apiKey, setApiKey] = useState('')
   const [saved, setSaved] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -137,13 +146,14 @@ function SkillDetailPanel({
     try {
       const res = await fetch(`/api/skills/${skill.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ content: skillContent })
       })
       if (res.ok) {
         setIsEditing(false)
       } else {
-        console.error('Failed to save skill content')
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to save skill content')
       }
     } catch (err) {
       console.error(err)
@@ -196,6 +206,8 @@ function SkillDetailPanel({
                 <Button
                   size="sm" variant="outline"
                   onClick={() => { setIsRenaming(true); setRenameValue(skill.name); setTimeout(() => renameInputRef.current?.focus(), 50) }}
+                  disabled={editLocked}
+                  title={editLocked ? 'Locked — only the owner can rename' : undefined}
                   className="h-8 gap-1.5 text-xs"
                 >
                   <Pencil className="w-3.5 h-3.5" /> Rename
@@ -210,7 +222,8 @@ function SkillDetailPanel({
                   size="sm"
                   variant={confirmDelete ? 'destructive' : 'ghost'}
                   onClick={handleDelete}
-                  disabled={isDeleting}
+                  disabled={isDeleting || editLocked}
+                  title={editLocked ? 'Locked — only the owner can delete' : undefined}
                   onBlur={() => setConfirmDelete(false)}
                   className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive"
                 >
@@ -233,17 +246,31 @@ function SkillDetailPanel({
               </div>
             ) : (
               <div className="flex-1 flex flex-col space-y-4">
+                {editLocked && (
+                  <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                    <Lock className="w-3.5 h-3.5 shrink-0" />
+                    This skill is locked. Only the owner can edit it — the editor is read-only.
+                  </div>
+                )}
                 <textarea
-                  className="flex-1 w-full bg-muted/30 border border-border rounded-md p-4 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                  readOnly={editLocked}
+                  className={cn(
+                    'flex-1 w-full bg-muted/30 border border-border rounded-md p-4 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none',
+                    editLocked && 'opacity-70 cursor-not-allowed'
+                  )}
                   value={skillContent}
                   onChange={(e) => setSkillContent(e.target.value)}
                 />
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>Cancel</Button>
-                  <Button onClick={handleSaveContent} disabled={isSaving}>
-                    {isSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin mr-2" />}
-                    Save SKILL.md
+                  <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                    {editLocked ? 'Close' : 'Cancel'}
                   </Button>
+                  {!editLocked && (
+                    <Button onClick={handleSaveContent} disabled={isSaving}>
+                      {isSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin mr-2" />}
+                      Save SKILL.md
+                    </Button>
+                  )}
                 </div>
               </div>
             )
@@ -283,6 +310,11 @@ function SkillDetailPanel({
                 {skill.disabled && (
                   <Badge className="text-xs bg-muted border-border">
                     <MinusCircle className="w-3 h-3 mr-1" />disabled
+                  </Badge>
+                )}
+                {skill.locked && (
+                  <Badge className="text-xs bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25 hover:bg-amber-500/20">
+                    <Lock className="w-3 h-3 mr-1" />locked
                   </Badge>
                 )}
               </div>
@@ -363,6 +395,38 @@ function SkillDetailPanel({
                 <span className="text-sm font-medium">
                   {skill.disabled ? 'Disabled' : 'Enabled'}
                 </span>
+              </div>
+
+              {/* Lock control — owner only */}
+              <div className="flex items-start gap-3 py-3 border-t border-border">
+                <button
+                  onClick={() => onLock(skill.id, !skill.locked)}
+                  disabled={!isOwner}
+                  title={!isOwner ? 'Only the owner can lock or unlock skills' : undefined}
+                  className={cn(
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 shrink-0',
+                    skill.locked ? 'bg-amber-500' : 'bg-muted',
+                    !isOwner && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  <span className={cn(
+                    'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                    skill.locked ? 'translate-x-6' : 'translate-x-1'
+                  )} />
+                </button>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium flex items-center gap-1.5">
+                    {skill.locked ? <Lock className="w-3.5 h-3.5 text-amber-500" /> : <LockOpen className="w-3.5 h-3.5 text-muted-foreground" />}
+                    {skill.locked ? 'Locked' : 'Unlocked'}
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {!ownerConfigured
+                      ? 'Owner gate not configured — set FIREBASE_SERVICE_ACCOUNT_JSON and run npm run grant-owner.'
+                      : skill.locked
+                      ? 'Read-only on disk. Agents cannot edit it at runtime; only the owner can change it.'
+                      : 'Lock to make this skill read-only so agents cannot change the base skill.'}
+                  </p>
+                </div>
               </div>
             </>
           )}
@@ -481,6 +545,11 @@ function SkillCard({
                 {skill.requiredBins.length}
               </span>
             )}
+            {skill.locked && (
+              <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium">
+                <Lock className="w-2.5 h-2.5" /> locked
+              </span>
+            )}
           </div>
           <span className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 group-hover:text-primary transition-colors">
             <Settings2 className="w-3 h-3" /> config
@@ -544,6 +613,24 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [detailId, setDetailId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
+  const [ownerConfigured, setOwnerConfigured] = useState(false)
+
+  // Determine whether the current user is the owner (can lock/unlock + edit locked skills)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/owner/status', { headers: await authHeaders() })
+        if (res.ok && !cancelled) {
+          const data = await res.json() as { owner: boolean; configured: boolean }
+          setIsOwner(!!data.owner)
+          setOwnerConfigured(!!data.configured)
+        }
+      } catch { /* leave defaults */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // Fetch skills and sync enabled states from server (used by refresh + poll)
   const syncSkills = useCallback(async (showSpinner: boolean) => {
@@ -621,7 +708,7 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
     try {
       const res = await fetch('/api/skills/manage', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ action: 'rename', skillId: id, newName }),
       })
       if (!res.ok) {
@@ -639,7 +726,7 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
     try {
       const res = await fetch('/api/skills/manage', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ action: 'delete', skillId: id }),
       })
       if (res.ok) {
@@ -649,6 +736,26 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
       }
     } catch (err) {
       console.error('Error deleting skill:', err)
+    }
+  }, [])
+
+  const handleLock = useCallback(async (id: string, nextLocked: boolean) => {
+    // Optimistic update
+    setSkills(prev => prev.map(s => s.id === id ? { ...s, locked: nextLocked } : s))
+    try {
+      const res = await fetch('/api/skills/lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ action: nextLocked ? 'lock' : 'unlock', skillId: id }),
+      })
+      if (!res.ok) {
+        setSkills(prev => prev.map(s => s.id === id ? { ...s, locked: !nextLocked } : s))
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to change lock state')
+      }
+    } catch (err) {
+      setSkills(prev => prev.map(s => s.id === id ? { ...s, locked: !nextLocked } : s))
+      console.error('Error changing lock state:', err)
     }
   }, [])
 
@@ -803,6 +910,9 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
           onDuplicate={handleDuplicate}
           onRename={handleRename}
           onDelete={handleDelete}
+          onLock={handleLock}
+          isOwner={isOwner}
+          ownerConfigured={ownerConfigured}
         />
       )}
     </div>

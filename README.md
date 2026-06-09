@@ -43,7 +43,36 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_bucket
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+
+# Owner gate (server-side) — required only for Skill Locking.
+# Provide ONE of the following so ClawPanel can verify the `owner` custom claim:
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}   # inline JSON
+# FIREBASE_SERVICE_ACCOUNT=/path/to/service-account.json       # or a file path
 ```
+
+## 🔒 Skill Locking
+
+Skills are shared files on disk, and agents can edit them at runtime — which means
+a shared skill can be changed by an agent and affect every agent that uses it.
+**Skill Locking** prevents this:
+
+- An **owner** can lock a skill from the Skills page. A locked skill is set
+  read-only on disk, so an agent's `write` tool cannot modify it at runtime.
+- Only the owner can lock/unlock or edit a locked skill (enforced via a Firebase
+  custom claim). Everyone else sees a read-only editor.
+
+**Set up the owner:**
+
+1. Add a service account to `.env.local` via `FIREBASE_SERVICE_ACCOUNT_JSON`
+   (or `FIREBASE_SERVICE_ACCOUNT` pointing to the JSON file). Get it from the
+   Firebase console → Project Settings → Service accounts → Generate new private key.
+2. Grant the owner claim to your account:
+   ```bash
+   npm run grant-owner -- you@example.com      # or a Firebase UID
+   ```
+3. Sign out/in (to refresh your ID token), then lock skills from the Skills page.
+
+To revoke: `npm run grant-owner -- you@example.com --revoke`.
 
 ## 🚀 Getting Started
 

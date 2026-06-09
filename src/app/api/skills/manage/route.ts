@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { existsSync, readFileSync, writeFileSync, cpSync, rmSync } from 'fs'
 import { join, dirname } from 'path'
 import { loadSkillsAsync } from '@/lib/skills'
+import { isSkillLocked, unlockSkill, withWritableSkill } from '@/lib/skill-locks'
+import { verifyOwner } from '@/lib/firebase-admin'
 import { apiErrorResponse } from '@/lib/api-error'
 
 /** Replace the `name:` field in a SKILL.md frontmatter block */
@@ -50,9 +52,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'newName is required' }, { status: 400 })
       }
 
+      // Locked skills can only be renamed by the owner.
+      if (isSkillLocked(skillId)) {
+        const owner = await verifyOwner(req)
+        if (!owner.ok) {
+          return NextResponse.json({ error: owner.error }, { status: owner.status })
+        }
+      }
+
       const content = readFileSync(skill.path, 'utf-8')
       const updated = patchName(content, newName.trim())
-      writeFileSync(skill.path, updated, 'utf-8')
+      withWritableSkill(skillId, skillDir, () => writeFileSync(skill.path, updated, 'utf-8'))
 
       return NextResponse.json({ ok: true, skillId, newName: newName.trim() })
     }
@@ -87,6 +97,16 @@ export async function POST(req: Request) {
       // Protect bundled (read-only) skills
       if (skill.source === 'bundled') {
         return NextResponse.json({ error: 'Bundled skills cannot be deleted' }, { status: 403 })
+      }
+
+      // Locked skills can only be deleted by the owner.
+      if (isSkillLocked(skillId)) {
+        const owner = await verifyOwner(req)
+        if (!owner.ok) {
+          return NextResponse.json({ error: owner.error }, { status: owner.status })
+        }
+        // Clear the lock entry and restore write perms before removing the dir.
+        unlockSkill(skillId, skillDir)
       }
 
       rmSync(skillDir, { recursive: true, force: true })

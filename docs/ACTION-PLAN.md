@@ -96,7 +96,16 @@ project before committing.
 
 ## Part 3 — How to get it done
 
-### Task A — Lock skills (mechanism kept as a choice)
+### Task A — Lock skills ✅ IMPLEMENTED (A2 + Firebase custom claim)
+
+> **Status:** Done. Chosen model: **A2 filesystem read-only** lock, gated by a
+> **Firebase custom `owner` claim**. New: `src/lib/skill-locks.ts`,
+> `src/lib/firebase-admin.ts`, `src/lib/client-auth.ts`,
+> `src/app/api/skills/lock/route.ts`, `src/app/api/owner/status/route.ts`,
+> `scripts/grant-owner.mjs`. Guarded: skill PUT + manage rename/delete. UI: lock
+> toggle, 🔒 badge, read-only editor for non-owners. See README → *Skill Locking*.
+
+The original options (kept for reference):
 
 Pick **one** enforcement model at implementation time:
 
