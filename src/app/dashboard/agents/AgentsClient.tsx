@@ -6,7 +6,7 @@ import {
   RefreshCw, FileText, Radio, LayoutDashboard,
   Loader2, AlertTriangle, Eye, Edit, X, Plus, Star,
   CheckCircle2, Zap, Bot, Sparkles,
-  Check, ChevronRight, Search, Cpu, ArrowRight, Send, Info,
+  Check, ChevronRight, Search, Cpu, ArrowRight, Send, Info, Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -1401,6 +1401,7 @@ type AgentSkillEntry = {
   source?: string
   eligible?: boolean
   requiredBins?: string[]
+  locked?: boolean
 }
 
 function SkillsPanel({ agentId, isActive }: { agentId: string; isActive: boolean }) {
@@ -1606,6 +1607,14 @@ function SkillsPanel({ agentId, isActive }: { agentId: string; isActive: boolean
                       )}
                       {!isCustom && (
                         <span className="text-[9px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded font-medium">inherited</span>
+                      )}
+                      {skill.locked && (
+                        <span
+                          title="Locked — read-only base skill; only the owner can change it"
+                          className="inline-flex items-center gap-0.5 text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-medium"
+                        >
+                          <Lock className="w-2.5 h-2.5" /> locked
+                        </span>
                       )}
                     </div>
                     {skill.description && (
