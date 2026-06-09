@@ -1,5 +1,9 @@
 # ClawPanel
 
+> **This is `clawpanel-v2`** — a fork of the original `kweephyo-pmt/clawpanel` that adds
+> **owner-gated Skill Locking**. See **[CHANGES-FROM-ORIGINAL.md](./CHANGES-FROM-ORIGINAL.md)**
+> for a full comparison with the original repo.
+
 ![ClawPanel Dashboard](./clawpanel.png)
 ClawPanel is a comprehensive web dashboard and control center for managing **OpenClaw AI** instances. Unlike standard cloud-based panels, ClawPanel runs entirely locally (or on your VPS) to hook directly into your OpenClaw filesystem and CLI interfaces, offering zero-latency monitoring, configuration, and project administration.
 
