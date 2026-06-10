@@ -78,6 +78,67 @@ a shared skill can be changed by an agent and affect every agent that uses it.
 
 To revoke: `npm run grant-owner -- you@example.com --revoke`.
 
+## 🛠 Implementing Skill Locking (developer guide)
+
+Step-by-step to reproduce this feature on a fresh ClawPanel (e.g. the original repo).
+Every step below is **✅ implemented** in this repo — file references included.
+
+### 0. Install the admin dependency
+```bash
+npm install firebase-admin
+```
+Add a script to `package.json`: `"grant-owner": "node scripts/grant-owner.mjs"`.
+
+### Skills / Security — Lock skills from runtime edits
+- **✅ Step 1 — Choose enforcement model.** Chosen: **A2 (filesystem read-only)**.
+  Rationale: agents edit skill files *at runtime* via their own file tools, so a
+  UI-only block isn't enough — the lock must bite on disk. (A1 = per-agent copies,
+  A3 = UI owner-gate only, were the alternatives.)
+- **✅ Step 2 — Add `locked` flag + persist a lock list.**
+  - `src/lib/skill-locks.ts` (new): a lock registry at
+    `~/.openclaw/clawpanel/skill-locks.json` (`readLockRegistry`, `lockSkill`,
+    `unlockSkill`, `isSkillLocked`).
+  - `src/lib/skills.ts`: add `locked: boolean` and `lockedBy: string | null` to the
+    `Skill` type and overlay them from the registry inside `loadSkillsAsync`.
+- **✅ Step 3 — Enforce in write paths (reject when locked unless owner).**
+  - `src/app/api/skills/[id]/route.ts` — `PUT` checks `isSkillLocked(id)` → `verifyOwner`.
+  - `src/app/api/skills/manage/route.ts` — `rename` and `delete` do the same.
+- **✅ Step 4 — Apply runtime enforcement (read-only perms).**
+  - `setDirReadOnly(dir, true)` recursively `chmod`s skill files to `0o444` on lock
+    (on Windows this sets the read-only attribute → an agent's write fails with `EPERM`).
+  - `withWritableSkill(id, dir, fn)` temporarily restores write for owner edits, then re-locks.
+
+### Access Control — Minimal owner gate
+- **✅ Step 1 — Pick mechanism.** Chosen: **Firebase custom claim** (`owner: true`).
+  - `src/lib/firebase-admin.ts` (new): initializes `firebase-admin` from
+    `FIREBASE_SERVICE_ACCOUNT_JSON` / `FIREBASE_SERVICE_ACCOUNT` / `GOOGLE_APPLICATION_CREDENTIALS`;
+    `verifyOwner(req)` validates the Bearer ID token and checks `decoded.owner === true`
+    (graceful `503` when unconfigured).
+  - `scripts/grant-owner.mjs` (new): `npm run grant-owner -- <email|uid> [--revoke]`.
+- **✅ Step 2 — Gate lock toggle + skill save behind the owner check.**
+  - `src/app/api/skills/lock/route.ts` (new): owner-only lock/unlock endpoint.
+  - `src/app/api/owner/status/route.ts` (new): reports `{ owner, configured }` to the UI.
+  - `src/lib/client-auth.ts` (new): `authHeaders()` attaches the ID token; used on
+    lock / save / rename / delete requests.
+
+### Skills / UX — Lock toggle + 🔒 badge + read-only editor
+- **✅ Step 1 — Lock toggle & badge in the Skills page.**
+  - `src/app/dashboard/skills/SkillsClient.tsx`: lock toggle (owner-only), 🔒 badge,
+    card chip, and a **read-only editor** for non-owners; fetches `/api/owner/status`.
+- **✅ Step 2 — Lock indicator in the agent skills panel.**
+  - `src/app/dashboard/agents/AgentsClient.tsx`: shows a 🔒 *locked* badge next to
+    locked skills when assigning skills to an agent.
+
+### Activate it
+1. Add a service account to `.env.local` (`FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT`).
+2. `npm run grant-owner -- you@example.com`
+3. Sign out/in to refresh your ID token, then lock skills from the Skills page.
+
+### Verify
+- `npx tsc --noEmit` and `npm run build` both pass.
+- Lock a skill → its `SKILL.md` becomes read-only; a runtime `writeFileSync` fails with `EPERM`.
+- `/api/owner/status` returns `{"owner":true,"configured":true}` for the owner's token; non-owners get `403` on locked-skill writes.
+
 ## 🚀 Getting Started
 
 To get started with local development or deploying:
