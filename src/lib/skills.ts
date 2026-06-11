@@ -291,3 +291,111 @@ export async function loadSkillsAsync(): Promise<Skill[]> {
 
   return skills.sort((a, b) => a.id.localeCompare(b.id))
 }
+
+// ---------------------------------------------------------------------------
+// CLI-based skills (source of truth: `openclaw skills list --json`)
+// ---------------------------------------------------------------------------
+
+/** Map OpenClaw CLI `source` strings to our SkillSource union. */
+function mapCliSource(s?: string): SkillSource {
+  switch (s) {
+    case 'openclaw-bundled': return 'bundled'
+    case 'openclaw-managed': return 'managed'
+    case 'agents-personal': return 'agents-personal'
+    case 'agents-project': return 'agents-project'
+    case 'openclaw-workspace': return 'workspace'
+    default: return s && s.includes('bundled') ? 'bundled' : 'workspace'
+  }
+}
+
+/**
+ * Load skills directly from `openclaw skills list --json` — the authoritative
+ * view OpenClaw itself uses (bundled + managed + workspace, with eligibility and
+ * enabled/disabled state). Paths are reconstructed where possible so the editor
+ * and lock features keep working for editable (non-bundled) skills.
+ *
+ * Returns null when the CLI is unavailable or returns no skills, so callers can
+ * fall back to filesystem discovery (loadSkillsAsync).
+ */
+export async function loadSkillsFromCliAsync(): Promise<Skill[] | null> {
+  const bin = process.env.OPENCLAW_BIN || 'openclaw'
+  let data: any
+
+  try {
+    const command = bin.includes('\\') || bin.includes('/') || bin.includes(' ')
+      ? `"${bin}" skills list --json`
+      : `${bin} skills list --json`
+
+    const { stdout } = await execAsync(command, {
+      encoding: 'utf-8',
+      timeout: 12000,
+      windowsHide: true,
+      env: {
+        ...process.env,
+        PATH: process.env.PATH,
+      },
+    })
+
+    data = JSON.parse(stdout)
+
+    console.log('[skills] parsed keys:', Object.keys(data || {}))
+    console.log('[skills] skills count:', Array.isArray(data?.skills) ? data.skills.length : 'NO skills array')
+  } catch (err) {
+    console.error('[skills] CLI failed:', err)
+    return null
+  }
+
+  const list: any[] = Array.isArray(data?.skills)
+    ? data.skills
+    : Array.isArray(data)
+      ? data
+      : []
+
+  if (list.length === 0) {
+    console.error('[skills] No skills found in CLI JSON:', data)
+    return null
+  }
+
+  const home = os.homedir()
+  const workspacePath = process.env.WORKSPACE_PATH ?? ''
+  const managedDir = data?.managedSkillsDir || join(home, '.openclaw', 'skills')
+  const lockRegistry = readLockRegistry()
+
+  const skills: Skill[] = list.map((s: any) => {
+    const id = String(s.name || s.id || '').trim()
+    const source = mapCliSource(s.source)
+
+    let path = ''
+
+    if (source === 'managed') {
+      path = join(managedDir, id, 'SKILL.md')
+    } else if (source === 'workspace' && workspacePath) {
+      path = join(workspacePath, 'skills', id, 'SKILL.md')
+    } else if (source === 'agents-project' && workspacePath) {
+      path = join(workspacePath, '.agents', 'skills', id, 'SKILL.md')
+    } else if (source === 'agents-personal') {
+      path = join(home, '.agents', 'skills', id, 'SKILL.md')
+    }
+
+    const requiredBins: string[] = Array.isArray(s?.missing?.bins)
+      ? s.missing.bins
+      : []
+
+    return {
+      id,
+      name: id,
+      description: s.description || 'An OpenClaw skill.',
+      emoji: s.emoji || '🔧',
+      homepage: s.homepage || null,
+      requiredBins,
+      install: [],
+      source,
+      path,
+      enabled: s.disabled !== true,
+      locked: Boolean(s.bundled) || id in lockRegistry,
+      lockedBy: lockRegistry[id]?.lockedBy ?? null,
+    }
+  }).filter((s) => s.id.length > 0)
+
+  return skills.sort((a, b) => a.id.localeCompare(b.id))
+}

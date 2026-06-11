@@ -90,24 +90,44 @@ export async function PATCH(
 
 /**
  * Remove an agent from `agents.list` in openclaw.json.
+ * Returns true if an entry was actually removed.
  */
-function unregisterAgentFromConfig(id: string): void {
+function unregisterAgentFromConfig(id: string): boolean {
   const cfg = readConfig()
-  if (!cfg) return
+  if (!cfg) return false
   try {
     if (Array.isArray(cfg?.agents?.list)) {
       const initialLength = cfg.agents.list.length
       cfg.agents.list = cfg.agents.list.filter((a: any) => a.id !== id)
-      if (cfg.agents.list.length < initialLength) writeConfig(cfg)
+      if (cfg.agents.list.length < initialLength) {
+        writeConfig(cfg)
+        return true
+      }
     }
   } catch (e) {
     console.warn(`Failed to unregister agent ${id} from config:`, e)
   }
+  return false
+}
+
+/** rmSync wrapped so a locked/permission error never aborts the whole delete. */
+function safeRemoveDir(dir: string): boolean {
+  try {
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true })
+      return true
+    }
+  } catch (e) {
+    console.warn(`Failed to remove ${dir}:`, e)
+  }
+  return false
 }
 
 // DELETE /api/agents/[id]
+// Idempotent: removes the agent from every known location and always responds
+// with JSON. Never 500s just because the agent is already gone.
 export async function DELETE(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -117,24 +137,27 @@ export async function DELETE(
       return NextResponse.json({ error: 'Cannot delete the main orchestrator agent.' }, { status: 403 })
     }
 
-    // 1. Delete agent workspace dir
-    const agentDir = namedAgentDir(id)
-    if (existsSync(agentDir)) rmSync(agentDir, { recursive: true, force: true })
+    let removed = false
 
-    // 2. Also try to delete from WORKSPACE_PATH/agents/<id>
+    // 1. ~/.openclaw/agents/<id>
+    if (safeRemoveDir(namedAgentDir(id))) removed = true
+
+    // 2. WORKSPACE_PATH/agents/<id>
     const workspacePath = process.env.WORKSPACE_PATH
-    if (workspacePath) {
-      const workspaceAgentDir = join(workspacePath, 'agents', id)
-      if (existsSync(workspaceAgentDir)) rmSync(workspaceAgentDir, { recursive: true, force: true })
-    }
+    if (workspacePath && safeRemoveDir(join(workspacePath, 'agents', id))) removed = true
 
-    // 3. Unregister from openclaw.json
-    unregisterAgentFromConfig(id)
+    // 3. openclaw.json agents.list
+    if (unregisterAgentFromConfig(id)) removed = true
 
-    // 4. Reload gateway
+    // 4. Reload gateway (non-fatal)
     await reloadGatewayAsync()
 
-    return NextResponse.json({ ok: true, deletedId: id })
+    return NextResponse.json({
+      ok: true,
+      deletedId: id,
+      removed,
+      message: removed ? 'Agent deleted' : 'Agent already absent',
+    })
   } catch (err) {
     return apiErrorResponse(err, 'Failed to delete agent')
   }

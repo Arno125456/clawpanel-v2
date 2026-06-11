@@ -753,8 +753,13 @@ function OverviewPanel({ agent, defaultId, identity, identityLoading, onGoFiles,
     setDeleting(true)
     try {
       const res = await fetch(`/api/agents/${agent.id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      // Parse defensively — an error response may be an HTML page, not JSON.
+      const raw = await res.text()
+      let data: any = null
+      try { data = raw ? JSON.parse(raw) : null } catch { /* non-JSON (e.g. HTML error page) */ }
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || `Delete failed (HTTP ${res.status})`)
+      }
       onDeleted()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to delete agent')

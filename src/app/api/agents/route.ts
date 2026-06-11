@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import { loadRegistry, listCliAgents, mainAgentDir, namedAgentDir } from '@/lib/agents-registry'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import { listCliAgents } from '@/lib/agents-registry'
 import { apiErrorResponse } from '@/lib/api-error'
+
+const execAsync = promisify(exec)
 
 function readConfig(): any {
   const p = join(homedir(), '.openclaw', 'openclaw.json')
@@ -11,91 +15,65 @@ function readConfig(): any {
   try { return JSON.parse(readFileSync(p, 'utf-8')) } catch { return null }
 }
 
+/**
+ * Source of truth: `openclaw agents list --json`.
+ * Returns the parsed array, or null if the CLI is unavailable / empty.
+ */
+async function agentsFromCli(bin: string): Promise<any[] | null> {
+  try {
+    const { stdout } = await execAsync(`${bin} agents list --json`, {
+      encoding: 'utf-8',
+      timeout: 12000,
+    })
+    const parsed = JSON.parse(stdout)
+    const list = Array.isArray(parsed) ? parsed : (parsed?.agents ?? null)
+    return Array.isArray(list) && list.length > 0 ? list : null
+  } catch {
+    return null
+  }
+}
+
 export async function GET() {
   try {
     const bin = process.env.OPENCLAW_BIN || 'openclaw'
 
-    // Fallback/base: filesystem discovery
-    const fsAgents = loadRegistry()
-    const workspacePath = process.env.WORKSPACE_PATH ?? ''
-
-    const combinedAgents = new Map<string, any>()
-
-    // Pre-populate with FS agents
-    for (const a of fsAgents) {
-      // If reportsTo is null, it's the root agent at WORKSPACE_PATH. Otherwise, it's a sub-agent.
-      const isRoot = !a.reportsTo
-      const agentPath = isRoot ? workspacePath : join(workspacePath, 'agents', a.id)
-      const openclawDir = isRoot ? mainAgentDir() : namedAgentDir(a.id)
-
-      combinedAgents.set(a.id, {
+    // ── Primary: the real OpenClaw CLI is the single source of truth ──────────
+    const cliList = await agentsFromCli(bin)
+    if (cliList) {
+      const agents = cliList.map((a: any) => ({
         id: a.id,
-        name: a.name,
-        workspace: agentPath,
-        agentDir: openclawDir,
+        name: a.identityName || a.id,
+        workspace: a.workspace ?? null,
+        agentDir: a.agentDir ?? null,
         model: a.model ?? null,
-        isDefault: isRoot,
-        identityName: a.name,
-        identityEmoji: a.emoji,
-        bindings: 0,
-        routes: [],
-      })
+        isDefault: !!a.isDefault,
+        identityName: a.identityName || a.id,
+        identityEmoji: a.identityEmoji ?? null,
+        bindings: typeof a.bindings === 'number' ? a.bindings : 0,
+        routes: Array.isArray(a.routes) ? a.routes : [],
+      }))
+      const defaultId = cliList.find((a: any) => a.isDefault)?.id ?? cliList[0]?.id ?? null
+      return NextResponse.json({ defaultId, agents })
     }
 
-    let defaultId = fsAgents.find(a => !a.reportsTo)?.id ?? fsAgents[0]?.id ?? null
-
-    // Override/merge with config data directly
-    try {
-      const summaries = listCliAgents(bin)
-      if (Array.isArray(summaries) && summaries.length > 0) {
-        const cliDefault = summaries.find(a => a.isDefault) ?? summaries[0]
-        defaultId = cliDefault.id
-
-        for (const a of summaries) {
-          const isMain = a.id === defaultId || a.id === 'main'
-          // For the main agent, strictly enforce the public custom WORKSPACE_PATH
-          // so we don't accidentally display the internal wrapper path.
-          const dedicatedPath = isMain
-            ? (process.env.WORKSPACE_PATH || a.workspace)
-            : a.workspace
-
-          combinedAgents.set(a.id, {
-            ...combinedAgents.get(a.id),
-            id: a.id,
-            name: a.identityName || combinedAgents.get(a.id)?.name || a.id,
-            workspace: dedicatedPath || combinedAgents.get(a.id)?.workspace ,
-            agentDir: a.agentDir || combinedAgents.get(a.id)?.agentDir,
-            model: a.model ?? combinedAgents.get(a.id)?.model ?? null,
-            isDefault: a.isDefault,
-            identityName: a.identityName || combinedAgents.get(a.id)?.name || a.id,
-            identityEmoji: a.identityEmoji ?? combinedAgents.get(a.id)?.identityEmoji ?? null,
-            bindings: 0, // Will be calculated below
-            routes: [],
-          })
-        }
-      }
-    } catch {
-      // config read failed — ignore and continue with just FS agents
-    }
-
-    // Calculate actual bindings per agent from openclaw.json
-    const cfg = readConfig()
-    const allBindings = cfg?.bindings ?? []
-    const defaultAcc = cfg?.channels?.telegram?.accounts?.['default']
-    const defaultIsClaimed = allBindings.some((b: any) => b?.match?.channel === 'telegram' && b?.match?.accountId === 'default')
-
-    for (const [id, agent] of combinedAgents.entries()) {
-      let count = allBindings.filter((b: any) => b && b.agentId === id).length
-      // Main agent implicit default account check
-      if (agent.isDefault && defaultAcc && !defaultIsClaimed) {
-        count += 1
-      }
-      agent.bindings = count
-    }
+    // ── Fallback (no CLI, e.g. sample workspace): filesystem reimplementation ──
+    const summaries = listCliAgents(bin) ?? []
+    const defaultAgent = summaries.find(a => a.isDefault) ?? summaries[0] ?? null
 
     return NextResponse.json({
-      defaultId,
-      agents: Array.from(combinedAgents.values()),
+      defaultId: defaultAgent?.id ?? null,
+      agents: summaries.map(a => ({
+        id: a.id,
+        name: a.identityName || a.id,
+        workspace: a.workspace,
+        agentDir: a.agentDir,
+        model: a.model ?? null,
+        isDefault: a.isDefault,
+        identityName: a.identityName || a.id,
+        identityEmoji: a.identityEmoji ?? null,
+        bindings: 0,
+        routes: [],
+      })),
     })
   } catch (err) {
     return apiErrorResponse(err, 'Failed to load agents')
