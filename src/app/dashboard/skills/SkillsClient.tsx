@@ -653,8 +653,9 @@ export default function SkillsClient({ initialSkills }: { initialSkills: Skill[]
 
   const handleRefresh = useCallback(() => syncSkills(true), [syncSkills])
 
-  // Poll every 15 seconds to pick up changes made in OpenClaw outside ClawPanel
+  // Fetch immediately on mount, then poll every 15s to pick up out-of-band changes
   useEffect(() => {
+    syncSkills(false)
     const id = setInterval(() => syncSkills(false), 15_000)
     return () => clearInterval(id)
   }, [syncSkills])

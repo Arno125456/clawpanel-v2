@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
-import { loadSkillsAsync } from '@/lib/skills'
+import { loadSkillsAsync, invalidateCliSkillsCache } from '@/lib/skills'
 import { lockSkill, unlockSkill } from '@/lib/skill-locks'
 import { verifyOwner } from '@/lib/firebase-admin'
 import { apiErrorResponse } from '@/lib/api-error'
@@ -40,6 +40,7 @@ export async function POST(req: Request) {
     } else {
       unlockSkill(skillId, skillDir)
     }
+    invalidateCliSkillsCache()
 
     return NextResponse.json({ ok: true, skillId, locked: action === 'lock' })
   } catch (err) {

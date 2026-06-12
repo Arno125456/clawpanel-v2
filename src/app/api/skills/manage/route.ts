@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { existsSync, readFileSync, writeFileSync, cpSync, rmSync } from 'fs'
 import { join, dirname } from 'path'
-import { loadSkillsAsync } from '@/lib/skills'
+import { loadSkillsAsync, invalidateCliSkillsCache } from '@/lib/skills'
 import { isSkillLocked, unlockSkill, withWritableSkill } from '@/lib/skill-locks'
 import { verifyOwner } from '@/lib/firebase-admin'
 import { apiErrorResponse } from '@/lib/api-error'
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
       const updated = patchName(content, newName.trim())
       withWritableSkill(skillId, skillDir, () => writeFileSync(skill.path, updated, 'utf-8'))
 
+      invalidateCliSkillsCache()
       return NextResponse.json({ ok: true, skillId, newName: newName.trim() })
     }
 
@@ -89,6 +90,7 @@ export async function POST(req: Request) {
         writeFileSync(targetSkillFile, updated, 'utf-8')
       }
 
+      invalidateCliSkillsCache()
       return NextResponse.json({ ok: true, originalId: skillId, newId: targetId })
     }
 
@@ -110,6 +112,7 @@ export async function POST(req: Request) {
       }
 
       rmSync(skillDir, { recursive: true, force: true })
+      invalidateCliSkillsCache()
       return NextResponse.json({ ok: true, deleted: skillId })
     }
 

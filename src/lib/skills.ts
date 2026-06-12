@@ -317,7 +317,21 @@ function mapCliSource(s?: string): SkillSource {
  * Returns null when the CLI is unavailable or returns no skills, so callers can
  * fall back to filesystem discovery (loadSkillsAsync).
  */
+let _cliSkillsCache: { at: number; skills: Skill[] } | null = null
+// Skills rarely change and the CLI call is slow (~10-20s); mutations call
+// invalidateCliSkillsCache() explicitly, so a long TTL is safe.
+const CLI_SKILLS_TTL_MS = 300_000
+
+/** Drop the cached CLI skills so the next read re-runs `openclaw skills list`. */
+export function invalidateCliSkillsCache(): void {
+  _cliSkillsCache = null
+}
+
 export async function loadSkillsFromCliAsync(): Promise<Skill[] | null> {
+  // `openclaw skills list --json` can take ~10s — serve a recent cached result.
+  if (_cliSkillsCache && Date.now() - _cliSkillsCache.at < CLI_SKILLS_TTL_MS) {
+    return _cliSkillsCache.skills
+  }
   const bin = process.env.OPENCLAW_BIN || 'openclaw'
   let data: any
 
@@ -337,9 +351,6 @@ export async function loadSkillsFromCliAsync(): Promise<Skill[] | null> {
     })
 
     data = JSON.parse(stdout)
-
-    console.log('[skills] parsed keys:', Object.keys(data || {}))
-    console.log('[skills] skills count:', Array.isArray(data?.skills) ? data.skills.length : 'NO skills array')
   } catch (err) {
     console.error('[skills] CLI failed:', err)
     return null
@@ -397,5 +408,7 @@ export async function loadSkillsFromCliAsync(): Promise<Skill[] | null> {
     }
   }).filter((s) => s.id.length > 0)
 
-  return skills.sort((a, b) => a.id.localeCompare(b.id))
+  const sorted = skills.sort((a, b) => a.id.localeCompare(b.id))
+  _cliSkillsCache = { at: Date.now(), skills: sorted }
+  return sorted
 }
